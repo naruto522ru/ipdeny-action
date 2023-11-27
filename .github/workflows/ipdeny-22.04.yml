@@ -1,0 +1,126 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Create ipset configs
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+on:
+  workflow_dispatch:
+  schedule:
+    # * is a special character in YAML so you have to quote this string
+    - cron:  '00 19 * * *'
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # The "build" workflow
+  Creating_list:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies for start script
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+       sudo apt update
+       sudo apt install -y bind9-dnsutils git bash coreutils util-linux ccache dos2unix sudo language-pack-ru language-pack-en locales --no-install-suggests
+       sudo sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+       sudo sed -i -e 's/# ru_RU.UTF-8 UTF-8/ru_RU.UTF-8 UTF-8/' /etc/locale.gen
+       sudo locale-gen --no-purge en_US.UTF-8 ru_RU.UTF-8
+       sudo apt install -y ipset ipset-persistent iptables iptables-persistent wget curl grepcidr python3-netaddr python-is-python3 parallel diffutils busybox-static xterm --no-install-suggests
+
+    - shell: bash
+      env:
+        TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+        URL: ${{ secrets.URL_PRIVATE }}
+      run: |
+        curl --max-time 120 --retry-delay 3 --retry 10 -4s -H "Authorization: token ${TOKEN}" -# ${URL} | tee /tmp/ipdeny-update.sh &>/dev/null
+
+    - name: Pre-start and start bash script
+      run: |
+        chmod -c 755 /tmp/ipdeny-update.sh && sudo env WORKFLOW=yes /tmp/ipdeny-update.sh && \
+        cp -vf /etc/iptables/ipsets ./ipset.conf
+
+    - name: Create for Mat1RX ipset.conf
+      run: |
+        curl --max-time 120 --retry-delay 3 --retry 10 -4s -# https://raw.githubusercontent.com/herrbischoff/country-ip-blocks/master/ipv4/ru.cidr | sudo tee /tmp/ru.txt &>/dev/null
+        if [[ -f /tmp/ru.txt ]]; then
+        if [[ -s /tmp/ru.txt ]]; then
+          echo -e "\e[1;33mNo empty ru.txt...\033[0m"
+          sudo truncate -s 0 /etc/iptables/ipsets
+          sudo cp -f ./ipset.conf /etc/iptables/ipsets
+          sudo systemctl restart ipset.service
+          sudo ipset -N RU hash:net
+          for RU in $(cat /tmp/ru.txt | sort -u ); do sudo ipset -A RU "$RU";done
+          sudo truncate -s 0 /etc/iptables/ipsets
+          sudo ipset save | sudo tee /etc/iptables/ipsets &>/dev/null
+          sudo systemctl restart ipset.service
+          cp -vf /etc/iptables/ipsets ./ipset_Mat1RX.conf
+        fi
+        fi
+
+    - name: Commit files
+      env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+          set -euo pipefail
+
+          git remote add github "https://${GITHUB_ACTOR}:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git pull github ${GITHUB_REF} --ff-only
+
+          # Get name & email from last commit
+          git config --local user.email "$(git log --format='%ae' --reverse | tail -1)"
+          git config --local user.name "$(git log --format='%an' --reverse | tail -1)"
+
+          # try commit
+          
+          #ipset.conf
+          if [ -s ./ipset.conf ]; then
+          echo -e "\e[1;33mNo empty ipset.conf...\033[0m"
+          git add ipset.conf
+          if [ -z "$(git status --porcelain)" ]; then
+            echo -e "\e[1;33mNo changes ipset.conf...\033[0m"
+            else
+            git commit -m "Auto-update ipset.conf"
+            # push changes
+            git push github HEAD:${GITHUB_REF}
+          fi
+          else
+          echo -e "\e[1;33mipset.conf EMPTY!!!!\033[0m"
+          fi
+          
+          #ipset_Mat1RX.conf
+          if [ -s ./ipset_Mat1RX.conf ]; then
+          echo -e "\e[1;33mNo empty ipset_Mat1RX.conf...\033[0m"
+          git add ipset_Mat1RX.conf
+          if [ -z "$(git status --porcelain)" ]; then
+            echo -e "\e[1;33mNo changes ipset_Mat1RX.conf...\033[0m"
+            else
+            git commit -m "Auto-update ipset_Mat1RX.conf"
+            # push changes
+            git push github HEAD:${GITHUB_REF}
+          fi
+          else
+          echo -e "\e[1;33mipset_Mat1RX.conf EMPTY!!!!\033[0m"
+          fi
+
+    - shell: bash
+      env:
+        TERM: xterm-256color
+      run: sudo diff -uwbsa --color=auto /var/debug/Spamhaus_CIDR.txt.original /var/debug/Spamhaus.txt || true
+
+    - shell: bash
+      env:
+        TERM: xterm-256color
+      run: for countries in {cn,ir,ae,za,hk,lt,tm,tw,ua}; do echo "" && sudo diff -uwbsa --color=auto /var/debug/"$countries".cidr.original /var/debug/"$countries".cidr.change || true; done
+
+#    - name: Smart Diff
+#      uses: LouisBrunner/diff-action@v0.3.0
+#      with:
+#        old: /var/debug/Spamhaus_CIDR.txt.original
+#        new: /var/debug/Spamhaus.txt
+#        mode: addition
+#        tolerance: mixed-worse
