@@ -26,7 +26,7 @@ jobs:
         DEBIAN_FRONTEND: noninteractive
       run: |
        sudo apt update
-       sudo apt install -y bind9-dnsutils git bash coreutils util-linux ccache dos2unix sudo language-pack-ru language-pack-en locales --no-install-suggests
+       sudo apt install -y bind9-dnsutils git bash coreutils util-linux ccache dos2unix sudo language-pack-ru language-pack-en locales moreutils --no-install-suggests
        sudo sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
        sudo sed -i -e 's/# ru_RU.UTF-8 UTF-8/ru_RU.UTF-8 UTF-8/' /etc/locale.gen
        sudo locale-gen --no-purge en_US.UTF-8 ru_RU.UTF-8
