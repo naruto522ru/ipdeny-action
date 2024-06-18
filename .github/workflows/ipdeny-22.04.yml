@@ -87,7 +87,7 @@ jobs:
       env:
         PATH: /usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/usr/sbin
       run: |
-        chmod -c 755 ipdeny-update.sh && sudo WORKFLOW=yes ipdeny-update.sh && \
+        chmod -c 755 ipdeny-update.sh && sudo WORKFLOW=yes ./ipdeny-update.sh && \
         cp -vf /etc/iptables/ipsets ./ipset.conf && \
         dos2unix ./ipset.conf
 
